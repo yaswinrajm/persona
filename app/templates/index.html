@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xapien Entity Resolution Assistant</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Entity Resolution Assistant</p>
+        <h1>Match people across profiles and news with evidence-first reasoning.</h1>
+        <p class="lede">
+          Search a name, compare records from two sources, and inspect the exact
+          signals that drove the final verdict.
+        </p>
+      </section>
+
+      <section class="panel">
+        <form id="search-form" class="search-form">
+          <label>
+            Name
+            <input name="name" placeholder="Rahul Sharma" required />
+          </label>
+          <label>
+            City
+            <input name="city" placeholder="Bengaluru" />
+          </label>
+          <label>
+            Company
+            <input name="company" placeholder="Infosys" />
+          </label>
+          <button type="submit">Run Search</button>
+        </form>
+      </section>
+
+      <section id="status" class="status hidden"></section>
+      <section id="results" class="results"></section>
+    </main>
+
+    <script>
+      const form = document.getElementById("search-form");
+      const status = document.getElementById("status");
+      const results = document.getElementById("results");
+
+      const verdictLabel = {
+        same_person: "Same person",
+        uncertain: "Uncertain",
+        different_person: "Different person",
+      };
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        results.innerHTML = "";
+        status.classList.remove("hidden");
+        status.textContent = "Searching sources and comparing candidates...";
+
+        const data = new FormData(form);
+        const payload = Object.fromEntries(data.entries());
+        if (!payload.city) delete payload.city;
+        if (!payload.company) delete payload.company;
+
+        try {
+          const response = await fetch("/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const body = await response.json();
+
+          if (!response.ok) {
+            throw new Error(body.detail || "Search failed");
+          }
+
+          status.textContent = `Found ${body.results.length} candidate comparisons across ${body.normalized_records.length} records.`;
+          renderResults(body);
+        } catch (error) {
+          status.textContent = error.message;
+        }
+      });
+
+      function renderResults(body) {
+        const records = body.results
+          .map((result) => {
+            const matched = result.decision.matched_fields.join(", ") || "none";
+            const conflicts = result.decision.conflicting_fields.join(", ") || "none";
+            const signals = result.candidate.signals;
+
+            return `
+              <article class="result-card">
+                <div class="result-head">
+                  <div>
+                    <h2>${verdictLabel[result.decision.verdict]}</h2>
+                    <p class="muted">Pair ${result.pair_id}</p>
+                  </div>
+                  <span class="score">${Math.round(result.decision.confidence * 100)}% confidence</span>
+                </div>
+                <div class="grid">
+                  <div class="record">
+                    <h3>${result.left.name}</h3>
+                    <p>${result.left.current_title || "Unknown role"} at ${result.left.current_company || "Unknown company"}</p>
+                    <p>${result.left.location.city || "Unknown city"}, ${result.left.location.country || "Unknown country"}</p>
+                    <p>${result.left.skills.join(", ")}</p>
+                  </div>
+                  <div class="record">
+                    <h3>${result.right.name}</h3>
+                    <p>${result.right.current_title || "Unknown role"} at ${result.right.current_company || "Unknown company"}</p>
+                    <p>${result.right.location.city || "Unknown city"}, ${result.right.location.country || "Unknown country"}</p>
+                    <p>${result.right.skills.join(", ")}</p>
+                  </div>
+                </div>
+                <p class="explanation">${result.decision.explanation}</p>
+                <div class="meta">
+                  <span>Matched: ${matched}</span>
+                  <span>Conflicts: ${conflicts}</span>
+                  <span>Routing: ${result.candidate.routing}</span>
+                  <span>Heuristic score: ${result.candidate.score}</span>
+                  <span>Role similarity: ${signals.role_similarity}</span>
+                  <span>Skill overlap: ${signals.skill_overlap}</span>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+
+        results.innerHTML = records || "<p>No candidate pairs found.</p>";
+      }
+    </script>
+  </body>
+  </html>
