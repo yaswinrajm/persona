@@ -1,4 +1,4 @@
-# Xapien Entity Resolution Assistant
+# persona Entity Resolution Assistant
 
 An MVP identity-resolution tool that searches two sources for a person name, normalizes messy profile/news data into one schema, compares candidate pairs with interpretable heuristics, and optionally uses an LLM to explain ambiguous matches.
 
